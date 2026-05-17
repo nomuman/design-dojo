@@ -8,11 +8,12 @@ title: "模範解答：アーキテクチャ・技術選定"
 
 | 層 | 採用技術 | 候補 | 採用理由 |
 |---|---|---|---|
-| フロント | Next.js App Router | Remix, Nuxt | ファイルベースルーティング、Server Componentで初期データ取得がシンプル |
-| 認証 | カスタムJWT | NextAuth, Clerk | 学習コストと柔軟性のバランス。外部依存を減らしたい場合に有効 |
-| DB | PostgreSQL | MySQL, SQLite | 複雑な制約（部分インデックス等）が必要なため |
-| ORM | Prisma | Drizzle, TypeORM | マイグレーション・型安全・ドキュメントの充実度 |
-| バリデーション | Zod | Yup, Joi | TypeScriptとの親和性、APIスキーマとフロントスキーマの共有可能性 |
+| フロント | Next.js App Router | Remix, Nuxt | ファイルベースルーティング、Server Componentで初期データ取得がシンプル。Vercelとの親和性が高い |
+| 認証 | カスタムJWT | Auth.js, Clerk | 学習コストと柔軟性のバランス。JWTの仕組みを理解するためにカスタム実装。実務ではAuth.jsやClerkを推奨 |
+| DB | PostgreSQL | MySQL, SQLite | 複雑な制約（部分インデックス、`EXCLUDE`制約等）が必要なため。MySQLでも実現可能だが、PostgreSQLの方が制約表現力が豊富 |
+| ORM | Prisma | Drizzle, TypeORM | マイグレーション管理とリレーション表現力がチーム開発に有利。マイグレーション履歴の管理が組み込みで充実している。個人開発やパフォーマンス重視ならDrizzleも有力 |
+| バリデーション | Zod | Yup, Joi | TypeScriptとの親和性が最高。APIスキーマとフロントスキーマの共有可能。YupはReact Hook Formとの組み合わせで人気だが、Zodの方が型推論が強力 |
+| セキュリティ | HttpOnly Cookie | localStorage | refreshTokenはXSS攻撃を防ぐためHttpOnly Cookieで管理。accessTokenは比較的短命なためlocalStorageでも許容範囲だが、可能ならこちらもCookie管理が理想 |
 
 ## フォルダ構成（模範）
 ```
@@ -33,9 +34,14 @@ lib/
 ## 重要な設計判断
 ### なぜAPI Routesか？
 Server Actionsでも実装可能だが、**APIとしての境界を意識する**ことで、以下が明確になる：
-- フロントとバックの責務分離
+- フロントとバックの責務分離（UIロジックとビジネスロジックの分離）
 - モバイルアプリ等、別クライアントからの再利用性
-- 認証ミドルウェアの適用範囲
+- 認証ミドルウェアの適用範囲が明確になる
+- HTTPメソッド・ステータスコード・エラーレスポンスの設計力が身につく
 
 ### なぜPrismaか？
- Drizzleは軽量だが、Prismaのマイグレーション管理とリレーション表現力がチーム開発に有利。個人開発ならDrizzleでも可。
+Drizzleはクエリビルダーが軽量でパフォーマンスが良いが、以下の理由でPrismaを推奨：
+- マイグレーション管理が組み込みで充実（`prisma migrate dev`/`deploy`）
+- リレーション表現力が高く、チーム開発時の可読性に有利
+- ドキュメントとコミュニティの充実度が高い
+- 個人開発やパフォーマンスがクリティカルな場合はDrizzleも有力な選択肢

@@ -7,10 +7,11 @@ title: "アーキテクチャ・技術選定"
 ## 技術スタック
 - **フロントエンド**: Next.js (App Router)
 - **バックエンド**: Next.js API Routes（単一コードベースで十分な規模感）
-- **認証**: NextAuth.js → カスタムJWT実装に移行（学習目的と柔軟性のため）
-- **DB**: PostgreSQL（予約データの整合性重視）
+- **認証**: Auth.js（旧 NextAuth.js）→ カスタムJWT実装に移行（学習目的と柔軟性のため）
+- **DB**: PostgreSQL（予約データの整合性重視。部分インデックスや排他制約が豊富）
 - **ORM**: Prisma（型安全・マイグレーションの容易さ）
 - **バリデーション**: Zod（API入出力の型安全）
+- **セキュリティ**: refreshToken は HttpOnly Cookie で管理。localStorage には保存しない（XSS対策）
 
 ## フォルダ構成
 ```
@@ -47,3 +48,6 @@ lib/
 - `app/api/` は機能ごとに階層化。RESTfulなURL設計を意識
 - `lib/` は純粋なロジック層。フレームワーク非依存部分を分離
 - Next.js App Router の Server Actions は使用しない。API Routes を使うことで「フロントとバックの境界」を明確にし、設計の学習を促進
+  - HTTPメソッド（GET/POST/PATCH等）の使い分け、ステータスコードの設計、エラーレスポンスの統一など、Web API設計の基礎が身につく
+  - 将来的にモバイルアプリ等の別クライアントが増えても、同じAPIを再利用できる
+- 認証は学習目的でカスタムJWTを採用。ただし実務では Auth.js や Clerk 等の既存ライブラリを検討すべき（セキュリティの専門知識が不要なため）

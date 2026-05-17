@@ -8,11 +8,12 @@ title: "模範解答：API設計"
 
 ### POST /api/auth/login
 **Request**: `{ email: string, password: string }`
-**Response**: `{ accessToken: string, refreshToken: string }`
+**Response**: `{ accessToken: string }`（refreshToken は HttpOnly Cookie で返却）
 **Error**: 401 Unauthorized
+**備考**: refreshToken を localStorage に保存すると XSS 攻撃を受けるリスクがあるため、必ず HttpOnly Cookie で管理すること
 
 ### POST /api/auth/refresh
-**Request**: `{ refreshToken: string }`
+**Request**: Cookie から refreshToken を読み取る（Body ではない）
 **Response**: `{ accessToken: string }`
 **Error**: 401（トークン無効・期限切れ）
 
@@ -29,7 +30,7 @@ title: "模範解答：API設計"
 **Validation**:
 - `startTime < endTime`
 - 施設の営業時間内か
-- 既存予約と重複しないか
+- 既存予約と時間帯が重複しないか（DB制約 + アプリケーション層の二重チェック）
 
 ### PATCH /api/reservations/[id]
 **Request**: `{ startTime?: ISO8601, endTime?: ISO8601, purpose?: string }`
@@ -45,7 +46,9 @@ title: "模範解答：API設計"
 {
   "error": {
     "code": "RESERVATION_CONFLICT",
-    "message": "..."
+    "message": "指定された時間帯は既に予約されています"
   }
 }
 ```
+- `code` はマシン可読な識別子。フロントエンドでエラー種別に応じた処理分岐に使用する
+- `message` は人間可読な説明。直接ユーザーに表示しても問題ない内容にする
