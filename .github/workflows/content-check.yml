@@ -1,0 +1,37 @@
+name: Content Check
+
+on:
+  pull_request:
+    paths:
+      - 'src/content/**/*.mdx'
+      - '.github/workflows/content-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/content/**/*.mdx'
+
+jobs:
+  verify-content:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm install glob
+        
+      - name: Run content verification
+        run: node scripts/verify-content.mjs
+        
+      - name: Check for unverified content
+        run: |
+          UNVERIFIED=$(grep -r "verified: false" src/content/ --include="*.mdx" || true)
+          if [ -n "$UNVERIFIED" ]; then
+            echo "⚠️  Warning: Found unverified content:"
+            echo "$UNVERIFIED"
+            # Don't fail the build, just warn
+          fi
