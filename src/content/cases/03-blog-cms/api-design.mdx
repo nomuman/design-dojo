@@ -90,7 +90,7 @@ sources:
 ### POST /api/upload/presigned-url
 - **Request**: `{ fileName: string, fileType: "image/jpeg"|"image/png"|"image/gif"|"image/webp", fileSize: number }`
 - **Response**: `{ uploadUrl: string, publicUrl: string, expiresIn: number }`
-- **Validation**: fileSize <= 5MB (5,242,880 bytes)
+- **Validation**: `fileSize <= 5MB` (5,242,880 bytes)
 - **Auth**: Required（記事作成権限を持つユーザー）
 
 ## コメント管理系
