@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 import { MermaidInit } from "@/components/MermaidInit";
+import { getAllCases, getAllExercises } from "@/lib/content";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,20 +20,28 @@ export const metadata: Metadata = {
   description: "設計力・要件定義力の体験型ドリル",
 };
 
-export default function RootLayout({
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cases = await getAllCases();
+  const exercises = await getAllExercises();
+
   return (
     <html
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex">
-        <Sidebar />
+        <Sidebar cases={cases} exercises={exercises} />
         <main className="flex-1 overflow-auto">
-          <div className="max-w-4xl mx-auto p-8">{children}</div>
+          <div className="max-w-4xl mx-auto p-4 md:p-8">{children}</div>
         </main>
         <MermaidInit />
       </body>
