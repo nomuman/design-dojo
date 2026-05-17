@@ -1,0 +1,90 @@
+---
+title: "模範解答：アーキテクチャ・技術選定"
+description: "TODOタスク管理アプリのアーキテクチャ・技術選定・模範解答"
+difficulty: "beginner"
+order: 2
+tags: ["アーキテクチャ", "技術選定"]
+verified: false
+last_reviewed: null
+sources:
+  - https://nextjs.org/docs
+  - https://authjs.dev/
+  - https://www.prisma.io/docs
+  - https://zod.dev/
+  - https://github.com/OptimalBits/bull
+  - https://inngest.com/
+---
+
+# 模範解答：アーキテクチャ・技術選定
+
+## 推奨技術スタック
+
+| 層 | 採用技術 | 候補 | 採用理由 |
+|---|---|---|---|
+| フロント | Next.js App Router | Remix, Nuxt | ファイルベースルーティング、Server Componentで初期データ取得がシンプル |
+| 認証 | カスタムJWT | Auth.js, Clerk | 学習目的でJWTの仕組みを理解するため。実務ではAuth.jsやClerkを推奨 |
+| DB | PostgreSQL | MySQL, SQLite | enum型、配列型、部分インデックス等、複雑な制約が必要なため |
+| ORM | Prisma | Drizzle, TypeORM | マイグレーション管理とリレーション表現力がチーム開発に有利 |
+| バリデーション | Zod | Yup, Joi | TypeScriptとの親和性が最高。APIスキーマとフロントスキーマの共有可能 |
+| 通知キュー | Bull | BullMQ, AWS SQS, RabbitMQ | Redisベースで軽量、遅延実行・再試行・優先度付けが組み込み。Node.jsとの親和性が高い |
+| スケジューラー | node-cron | node-schedule, Inngest | シンプルで導入が容易。ただし本番環境ではInngestの検討も有効 |
+| セキュリティ | HttpOnly Cookie | localStorage | refreshTokenはXSS攻撃を防ぐためHttpOnly Cookieで管理 |
+
+## フォルダ構成（模範）
+```
+app/
+├── api/
+│   ├── auth/
+│   ├── tasks/
+│   └── categories/
+├── (auth)/
+├── tasks/
+└── categories/
+lib/
+├── db.ts
+├── auth.ts
+├── validation.ts
+└── queue.ts
+workers/
+├── notification.ts
+└── overdue-check.ts
+```
+
+## 重要な設計判断
+
+### 通知キューの選定：なぜ Bull か
+期限通知を実装する際の選択肢比較：
+
+| 方式 | メリット | デメリット | 結論 |
+|------|---------|-----------|------|
+| **ポーリング** | 実装が簡単 | 無駄なリクエスト、スケールしない | ❌ |
+| **DBトリガー** | DBレベルで自動化 | ビジネスロジックをDBに閉じ込め、保守が困難 | ❌ |
+| **Cron + 直接送信** | シンプル | 大量通知時に主処理をブロック、再試行が困難 | △ |
+| **Cron + Queue** | 処理の分散、再試行、並列処理が容易 | Redis等のインフラが必要 | ✅ |
+
+**Bull（または BullMQ）を選ぶ理由**：
+- Redisベースの軽量なキューシステム
+- ジョブの遅延実行（`delay` オプション）、再試行（`attempts`）、優先度付けが組み込み
+- Node.jsエコシステムとの親和性が高く、Prismaと同じプロセス内で動作可能
+- **ただし**: 本番環境で本格的なスケジューリングが必要な場合は **Inngest** や **Temporal** の検討も有効。Inngestは「関数単位のスケジューリング」「冪等性保証」「分散トレーシング」が組み込みで、複雑なワークフローに向いている
+
+### なぜ `workers/` ディレクトリを分けるのか
+Next.js API Routes は HTTP リクエストに応答するため、バックグラウンドでの継続的処理（cron、キュー消費）には不向きです。
+
+`workers/` を分離することで：
+- API サーバーとワーカープロセスを**独立してスケール**できる
+- ワーカーの障害が API サーバーに影響しない
+- **ただし**: 開発環境では `concurrently` 等で同時起動する必要がある
+
+### `NOTIFICATION_LOG` の設計：なぜ独立テーブルか
+通知履歴を `TASK` にカラムとして持つ場合との比較：
+
+- **TASKにカラム追加**: `notified_at`（datetime）
+  - ❌ 通知方法（メール/アプリ内）の区別ができない
+  - ❌ 通知失敗時の再試行履歴が残らない
+  - ❌ 共有相手への通知に対応できない
+
+- **独立テーブル**: `NOTIFICATION_LOG`
+  - ✅ 「誰に」「どの方法で」「成功したか」を完全に追跡
+  - ✅ 再試行時に過去の失敗履歴を参照可能
+  - ✅ 拡張性：プッシュ通知、Slack通知等への追加が容易

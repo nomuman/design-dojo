@@ -1,0 +1,113 @@
+---
+title: "DB設計・ER図"
+description: "TODOタスク管理アプリのデータベース設計とER図"
+difficulty: "beginner"
+order: 2
+tags: ["DB設計", "ER図", "PostgreSQL"]
+verified: false
+last_reviewed: null
+sources:
+  - https://www.postgresql.org/docs/current/datatype-enum.html
+  - https://www.postgresql.org/docs/current/ddl-constraints.html
+---
+
+# DB設計・ER図
+
+```mermaid
+erDiagram
+    USER ||--o{ TASK : creates
+    USER ||--o{ CATEGORY : owns
+    TASK ||--o{ TASK_CATEGORY : has
+    CATEGORY ||--o{ TASK_CATEGORY : belongs_to
+    TASK ||--o{ TASK_SHARE : shared_via
+    USER ||--o{ TASK_SHARE : receives
+    TASK ||--o{ NOTIFICATION_LOG : generates
+    
+    USER {
+        uuid id PK
+        string email UK
+        string password_hash
+        string name
+        datetime created_at
+        datetime updated_at
+    }
+    
+    CATEGORY {
+        uuid id PK
+        uuid user_id FK
+        string name
+        string color
+        datetime created_at
+    }
+    
+    TASK {
+        uuid id PK
+        uuid user_id FK
+        string title
+        text description
+        enum priority "low|medium|high"
+        enum status "todo|in_progress|done"
+        datetime due_date
+        datetime started_at
+        datetime completed_at
+        boolean is_overdue
+        datetime created_at
+        datetime updated_at
+    }
+    
+    TASK_CATEGORY {
+        uuid task_id FK
+        uuid category_id FK
+        PK(task_id, category_id)
+    }
+    
+    TASK_SHARE {
+        uuid id PK
+        uuid task_id FK
+        uuid shared_with_user_id FK
+        enum permission "view|edit"
+        datetime created_at
+    }
+    
+    NOTIFICATION_LOG {
+        uuid id PK
+        uuid task_id FK
+        uuid user_id FK
+        enum type "due_soon|overdue"
+        enum channel "email|in_app"
+        enum status "pending|sent|failed"
+        datetime scheduled_at
+        datetime sent_at
+        datetime created_at
+    }
+```
+
+## 設計ポイント
+
+### なぜ `TASK.status` を enum にするのか
+タスクの状態を文字列（string）ではなく enum にする理由：
+- **整合性**: `todo`, `in_progress`, `done` 以外の値が入らない（DBレベルで保証）
+- **可読性**: コード上でも `TaskStatus.TODO` のように型安全に扱える
+- **拡張性**: 将来的に `archived`（ゴミ箱）や `cancelled` を追加しやすい
+
+**重要**: 状態遷移のルール（例：`todo` → `done` はスキップしても良いか？）は**アプリケーション層で制御**する。DB enum は「どの値が許容されるか」を定義するだけで、「どの順序で遷移できるか」は定義しない。
+
+### なぜ `TASK.is_overdue` を持つのか
+期限切れかどうかは `due_date < NOW()` で判定できるため、厳密には冗長です。しかし、以下の理由で保持します：
+- **パフォーマンス**: 一覧表示時に毎回 `NOW()` と比較するより、インデックスを貼った boolean の方が高速
+- **履歴の保存**: 一度期限切れになったタスクを「期限を延長」した場合、過去に期限切れだった記録が残る
+- **ただし**: cronジョブで `is_overdue` を更新する際、トランザクション内で `due_date` も再確認し、競合を防ぐ
+
+### なぜ `NOTIFICATION_LOG` テーブルを分離するのか
+通知を `TASK` にカラムとして持つ（`notified_at` 等）と、以下の問題が生じます：
+- 通知方法（メール / アプリ内）を複数持てない
+- 通知失敗時の再試行履歴が残らない
+- 通知対象が「タスク作成者」以外（共有相手等）に増えた場合に対応できない
+
+独立したテーブルにすることで、**「誰に」「どの方法で」「いつ」「成功したか」**を完全に追跡できます。
+
+### なぜ `TASK_SHARE` に `id`（独自PK）を持つのか
+`task_id` + `shared_with_user_id` の複合キーでも一意になりますが、独自PKを持つ理由：
+- **将来的な拡張**: 共有設定の変更履歴（「閲覧」→「編集」に変更した記録）を持つ場合、複合キーだと識別が困難
+- **URL設計**: REST APIで共有設定を個別に操作する際（`DELETE /api/task-shares/[id]`）、単一の識別子が必要
+- **ただし**: 現状の要件では複合ユニーク制約（`task_id` + `shared_with_user_id`）も併設する

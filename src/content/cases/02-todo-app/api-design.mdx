@@ -1,0 +1,107 @@
+---
+title: "API設計"
+description: "TODOタスク管理アプリのREST API設計"
+difficulty: "beginner"
+order: 2
+tags: ["API設計", "REST", "JWT"]
+verified: false
+last_reviewed: null
+sources:
+  - https://datatracker.ietf.org/doc/html/rfc7519
+  - https://nextjs.org/docs/app/building-your-application/routing/route-handlers
+---
+
+# API設計
+
+## 認証系
+
+### POST /api/auth/login
+- **Request**: `{ email: string, password: string }`
+- **Response**: `{ accessToken: string }`（refreshToken は HttpOnly Cookie で返却）
+- **Error**: 401（認証失敗）
+- **備考**: refreshToken を localStorage に保存すると XSS 攻撃を受けるリスクがあるため、必ず HttpOnly Cookie で管理すること
+
+### POST /api/auth/refresh
+- **Request**: Cookie から refreshToken を読み取る（Body ではない）
+- **Response**: `{ accessToken: string }`
+- **Error**: 401（トークン無効・期限切れ）
+
+## タスク系
+
+### GET /api/tasks
+- **Query**: `?status=todo|in_progress|done&priority=low|medium|high&categoryId=UUID&search=keyword&sort=due_date_asc|due_date_desc|created_desc&limit=20&offset=0`
+- **Response**: `{ tasks: Task[], total: number }`
+- **Auth**: Required（自分のタスク + 共有されたタスク）
+- **検索の仕様**:
+  - `search`: タイトル・説明の部分一致（ILIKE）
+  - `sort`: 期限昇順・降順、作成日降順
+  - 複数条件の AND 検索
+
+### POST /api/tasks
+- **Request**: `{ title: string, description?: string, dueDate?: ISO8601, priority: "low"|"medium"|"high", categoryIds?: UUID[] }`
+- **Response**: `201 Created` → `Task`
+- **Validation**: `title` は必須、最大100文字
+
+### GET /api/tasks/[id]
+- **Response**: `Task`（詳細）
+- **Auth**: Required（タスク作成者、または共有されているユーザー）
+
+### PATCH /api/tasks/[id]
+- **Request**: `{ title?: string, description?: string, dueDate?: ISO8601, priority?: "low"|"medium"|"high", status?: "todo"|"in_progress"|"done", categoryIds?: UUID[] }`
+- **Auth**: Required（タスク作成者、または `permission: edit` で共有されているユーザー）
+- **制約**: 
+  - `status: done` に変更した場合、`completed_at` を自動設定
+  - `status: in_progress` に変更した場合、`started_at` が未設定なら自動設定
+  - `status` を `done` → `todo` に戻した場合、`completed_at` を null にする
+
+### DELETE /api/tasks/[id]
+- **Auth**: Required（タスク作成者のみ。共有されているユーザーは削除不可）
+- **Response**: `204 No Content`
+
+## カテゴリ系
+
+### GET /api/categories
+- **Response**: `{ categories: Category[] }`
+- **Auth**: Required（自分のカテゴリのみ）
+
+### POST /api/categories
+- **Request**: `{ name: string, color?: string }`
+- **Response**: `201 Created` → `Category`
+
+### PATCH /api/categories/[id]
+- **Request**: `{ name?: string, color?: string }`
+- **Response**: `200 OK` → `Category`
+
+### DELETE /api/categories/[id]
+- **制約**: 紐付けられたタスクが0件の場合のみ削除可能
+- **Response**: `204 No Content`
+
+## 共有系
+
+### POST /api/tasks/[id]/shares
+- **Request**: `{ userId: UUID, permission: "view"|"edit" }`
+- **Response**: `201 Created` → `TaskShare`
+- **制約**: 
+  - 自分自身には共有不可
+  - 既に共有済みのユーザーには重複して共有不可（ユニーク制約で防ぐ）
+  - タスク作成者のみ実行可能
+
+### DELETE /api/tasks/[id]/shares/[shareId]
+- **Auth**: Required（タスク作成者のみ）
+- **Response**: `204 No Content`
+
+## エラーレスポンス統一フォーマット
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "タイトルは必須です",
+    "details": [
+      { "field": "title", "message": "必須項目です" }
+    ]
+  }
+}
+```
+- `code`: マシン可読な識別子
+- `message`: 人間可読な説明
+- `details`（オプション）: バリデーションエラー時に各フィールドのエラーを配列で返す
