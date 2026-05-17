@@ -1,0 +1,130 @@
+---
+title: "アーキテクチャ・技術選定"
+description: "ブログ/CMSのアーキテクチャと技術スタックの選定理由"
+difficulty: "beginner"
+order: 3
+tags: ["アーキテクチャ", "技術選定", "RBAC", "画像アップロード"]
+verified: false
+last_reviewed: null
+sources:
+  - https://nextjs.org/docs
+  - https://authjs.dev/
+  - https://www.prisma.io/docs
+  - https://zod.dev/
+  - https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html
+---
+
+# アーキテクチャ・技術選定
+
+## 技術スタック
+- **フロントエンド**: Next.js (App Router)
+- **バックエンド**: Next.js API Routes
+- **認証**: カスタムJWT（学習目的）
+- **DB**: PostgreSQL
+- **ORM**: Prisma
+- **バリデーション**: Zod
+- **セキュリティ**: refreshToken は HttpOnly Cookie で管理
+- **画像ストレージ**: Cloudflare R2（または AWS S3、Supabase Storage）
+- **CDN**: Cloudflare（または CloudFront）
+
+## フォルダ構成
+```
+app/
+├── api/
+│   ├── auth/
+│   │   ├── login/route.ts
+│   │   └── refresh/route.ts
+│   ├── public/
+│   │   ├── articles/
+│   │   │   ├── route.ts          # GET
+│   │   │   └── [slug]/
+│   │   │       ├── route.ts      # GET
+│   │   │       └── comments/
+│   │   │           └── route.ts  # GET
+│   │   ├── categories/
+│   │   │   └── route.ts          # GET
+│   │   └── tags/
+│   │       └── route.ts          # GET
+│   ├── articles/
+│   │   ├── route.ts              # GET, POST
+│   │   └── [id]/
+│   │       ├── route.ts          # GET, PATCH, DELETE
+│   ├── comments/
+│   │   ├── route.ts              # GET
+│   │   └── [id]/
+│   │       ├── approve/
+│   │       │   └── route.ts      # PATCH
+│   │       └── reject/
+│   │           └── route.ts      # PATCH
+│   └── upload/
+│       └── presigned-url/
+│           └── route.ts          # POST
+├── (auth)/
+│   ├── login/page.tsx
+│   └── register/page.tsx
+├── articles/
+│   ├── page.tsx
+│   └── [slug]/page.tsx
+└── admin/
+    ├── articles/page.tsx
+    ├── comments/page.tsx
+    └── categories/page.tsx
+lib/
+├── db.ts              # Prisma Client singleton
+├── auth.ts            # JWT署名・検証 + 権限チェック
+├── validation.ts      # Zod schemas
+└── storage.ts         # R2/S3 クライアント初期化
+middleware.ts          # 公開APIのレート制限、認証ミドルウェア
+```
+
+## 重要な設計判断
+
+### なぜ公開APIと管理APIを分けるのか
+同じ「記事取得」でも、以下の理由でエンドポイントを分離すべきです：
+
+| 観点 | 公開API | 管理API |
+|------|---------|---------|
+| 認証 | 不要 | 必須 |
+| レスポンス内容 | タイトル・本文・著者名等 | + ステータス・公開日・編集履歴等 |
+| アクセス制御 | `published` のみ | 自分の記事（全状態） |
+| キャッシュ | CDNキャッシュ可能 | キャッシュ不要（ or 短時間） |
+| レート制限 | 厳しい（100req/min） | 緩い（ or なし） |
+
+**分離しない場合の問題**:
+- 1つのエンドポイントで「認証の有無」「レスポンスの違い」を分岐すると、コードが複雑になる
+- CDNキャッシュの設定が困難（認証あり/なしでキャッシュ戦略が異なる）
+- 将来的に「公開APIを外部開発者に提供」する際に、管理APIと混在してセキュリティリスクが増大
+
+### なぜプリサインドURL方式を使うのか
+画像アップロードの方式比較：
+
+| 方式 | メリット | デメリット | 結論 |
+|------|---------|-----------|------|
+| **サーバー経由** | 認証・バリデーションが容易 | サーバー負荷が高い、帯域コストが増大 | ❌ |
+| **クライアント直接（認証情報付き）** | サーバー負荷が低い | クライアントにAWS認証情報を露出、セキュリティリスク | ❌ |
+| **プリサインドURL** | サーバー負荷が低い、認証情報を露出しない、有効期限で制限可能 | 実装が少し複雑 | ✅ |
+
+**プリサインドURLのフロー**:
+1. クライアントが「アップロード用URLを発行して」とAPIにリクエスト（認証必要）
+2. APIがS3/R2プリサインドURLを生成して返却（有効期限: 5分）
+3. クライアントがそのURLに対して画像をPUT
+4. アップロード完了後、クライアントが記事保存APIを呼び出し、画像URLを含める
+
+### なぜ `middleware.ts` でレート制限を行うのか
+公開APIは認証不要のため、悪意のあるユーザーからのDDoS攻撃やスクレイピングのリスクがあります。
+
+Next.js の `middleware.ts` でレート制限を行う理由：
+- API Routes の前段でリクエストを遮断できる（無駄な処理を実行しない）
+- IPアドレスベースで制限可能
+- ただし、本番環境では**WAF（Web Application Firewall）**や**CDNレベルでのレート制限**（Cloudflare Rate Limiting等）も併用すべき
+
+### なぜ RBAC（ロールベース）を採用するのか
+権限管理の方式比較：
+
+| 方式 | メリット | デメリット | 結論 |
+|------|---------|-----------|------|
+| **フラグ制御**（`is_admin` boolean） | シンプル | 権限が増えるとカラムが増殖（`is_editor`, `can_publish` ...） | ❌ |
+| **RBAC**（role enum） | シンプル、一般的 | 細かい権限（「特定の記事だけ編集可能」）には不十分 | ✅ 現状の要件なら十分 |
+| **ABAC**（属性ベース） | 細かい権限設定が可能 | 複雑、実装コストが高い | △ 将来的な拡張 |
+
+現状の要件（admin / editor / reader）では **RBAC** で十分です。ただし、将来的に「特定の記事だけeditorに編集権限を与える」などの細かい制御が必要になった場合は、**権限テーブル**（`Permission` テーブル）の導入を検討してください。

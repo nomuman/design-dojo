@@ -1,0 +1,157 @@
+---
+title: "DB設計・ER図"
+description: "ブログ/CMSのデータベース設計とER図"
+difficulty: "beginner"
+order: 3
+tags: ["DB設計", "ER図", "PostgreSQL"]
+verified: false
+last_reviewed: null
+sources:
+  - https://www.postgresql.org/docs/current/datatype-enum.html
+  - https://www.postgresql.org/docs/current/ddl-constraints.html
+  - https://www.postgresql.org/docs/current/tutorial-fk.html
+---
+
+# DB設計・ER図
+
+```mermaid
+erDiagram
+    USER ||--o{ ARTICLE : writes
+    USER ||--o{ COMMENT : writes
+    USER ||--o{ CATEGORY : manages
+    ARTICLE ||--o{ COMMENT : receives
+    ARTICLE ||--o{ ARTICLE_TAG : has
+    TAG ||--o{ ARTICLE_TAG : belongs_to
+    ARTICLE }o--|| CATEGORY : belongs_to
+    COMMENT ||--o{ COMMENT : replies_to
+    
+    USER {
+        uuid id PK
+        string email UK
+        string password_hash
+        string name
+        enum role "admin|editor|reader"
+        datetime created_at
+        datetime updated_at
+    }
+    
+    CATEGORY {
+        uuid id PK
+        string name
+        uuid parent_id FK
+        string slug UK
+        datetime created_at
+    }
+    
+    TAG {
+        uuid id PK
+        string name UK
+        string slug UK
+        datetime created_at
+    }
+    
+    ARTICLE {
+        uuid id PK
+        uuid author_id FK
+        uuid category_id FK
+        string title
+        text summary
+        text content
+        string cover_image_url
+        enum status "draft|pending|published|archived"
+        datetime published_at
+        datetime archived_at
+        datetime created_at
+        datetime updated_at
+    }
+    
+    ARTICLE_TAG {
+        uuid article_id FK
+        uuid tag_id FK
+        PK(article_id, tag_id)
+    }
+    
+    COMMENT {
+        uuid id PK
+        uuid article_id FK
+        uuid author_id FK
+        uuid parent_id FK
+        text content
+        enum status "pending|approved|rejected"
+        datetime created_at
+        datetime updated_at
+    }
+```
+
+## 設計ポイント
+
+### なぜ `ARTICLE.status` を enum にするのか
+記事の状態を管理する方法として、以下の選択肢があります：
+
+| 設計 | メリット | デメリット | 結論 |
+|------|---------|-----------|------|
+| `is_published` + `is_draft`（2フラグ） | シンプル | 矛盾した状態（両方true）が作れる | ❌ |
+| `published_at`（datetime） | 日時情報を持てる | `archived`（非公開）を表現できない | ❌ |
+| `status` enum + `published_at` | 状態を明確に管理、日時も保持 | カラム数が増える | ✅ |
+
+**enum の値と意味**:
+- `draft`: 下書き（著者のみ閲覧可）
+- `pending`: 公開申請中（editorがadminの承認を待っている）
+- `published`: 公開済み（読者が閲覧可）
+- `archived`: 非公開（過去に公開されていたが、現在は非公開）
+
+### なぜ `CATEGORY` に `parent_id` を持つのか
+カテゴリを階層構造にするため。`parent_id` が `null` なら親カテゴリ、値があれば子カテゴリです。
+
+**自己参照の外部キー**:
+```sql
+ALTER TABLE Category
+ADD CONSTRAINT fk_category_parent
+FOREIGN KEY (parent_id) REFERENCES Category(id);
+```
+
+**階層の深さ制限**:
+- DBレベルでは無限に深くできますが、アプリケーション層で**最大3階層まで**に制限すべきです
+- 深すぎる階層はUI上で表示が困難になり、ユーザビリティが低下する
+
+### なぜ `COMMENT` に `parent_id` を持つのか
+階層コメント（返信）を実現するため。`parent_id` が `null` なら記事への直接コメント、値があれば別コメントへの返信です。
+
+**最大階層の制限**:
+- アプリケーション層で**最大3階層まで**に制限
+- 4階層以上になる場合は、フラットな表示（例: `@username への返信」）にする
+
+**無限階層を防ぐ理由**:
+- UIが複雑になり、インデントが画面幅を超える
+- パフォーマンス劣化（再帰クエリが必要）
+
+### なぜ `ARTICLE` と `TAG` を中間テーブルで紐付けるのか
+1つの記事に複数のタグを付け、1つのタグが複数の記事に付く**多対多**の関係を表現するため。
+
+**複合主キー**:
+```sql
+CREATE TABLE ArticleTag (
+    article_id UUID REFERENCES Article(id) ON DELETE CASCADE,
+    tag_id UUID REFERENCES Tag(id) ON DELETE CASCADE,
+    PRIMARY KEY (article_id, tag_id)
+);
+```
+
+- `ON DELETE CASCADE` で記事またはタグが削除された場合、紐付けも自動削除
+- 複合主キーで「同じ記事に同じタグを重複して付けられない」をDBレベルで保証
+
+### なぜ `USER` に `role` enum を持つのか
+権限管理をシンプルにするため。Role-Based Access Control（RBAC）の基本形です。
+
+**権限の対応表**:
+| アクション | admin | editor | reader |
+|-----------|-------|--------|--------|
+| 記事作成 | ✅ | ✅ | ❌ |
+| 記事編集（自分） | ✅ | ✅ | ❌ |
+| 記事編集（他人） | ✅ | ❌ | ❌ |
+| 記事公開 | ✅ | 承認必要 | ❌ |
+| コメント投稿 | ✅ | ✅ | ✅ |
+| コメント承認 | ✅ | ✅ | ❌ |
+| カテゴリ管理 | ✅ | ❌ | ❌ |
+
+**注意**: 複雑な権限管理が必要になった場合（例: 「特定の記事だけeditorに編集権限を与える」）、`role` enum だけでは不十分になります。その場合は**別途権限テーブル**を検討してください。

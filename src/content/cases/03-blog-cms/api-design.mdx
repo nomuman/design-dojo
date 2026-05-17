@@ -1,0 +1,140 @@
+---
+title: "API設計"
+description: "ブログ/CMSのREST API設計"
+difficulty: "beginner"
+order: 3
+tags: ["API設計", "REST", "JWT", "RBAC"]
+verified: false
+last_reviewed: null
+sources:
+  - https://datatracker.ietf.org/doc/html/rfc7519
+  - https://nextjs.org/docs/app/building-your-application/routing/route-handlers
+---
+
+# API設計
+
+## 認証系
+
+### POST /api/auth/login
+- **Request**: `{ email: string, password: string }`
+- **Response**: `{ accessToken: string }`（refreshToken は HttpOnly Cookie で返却）
+- **Error**: 401（認証失敗）
+- **備考**: refreshToken を localStorage に保存すると XSS 攻撃を受けるリスクがあるため、必ず HttpOnly Cookie で管理すること
+
+### POST /api/auth/refresh
+- **Request**: Cookie から refreshToken を読み取る（Body ではない）
+- **Response**: `{ accessToken: string }`
+- **Error**: 401（トークン無効・期限切れ）
+
+## 公開API（認証不要）
+
+### GET /api/public/articles
+- **Query**: `?categorySlug=string&tagSlug=string&authorId=UUID&search=keyword&sort=published_desc|published_asc&limit=20&offset=0`
+- **Response**: `{ articles: ArticleSummary[], total: number }`
+- **制約**: `status: published` の記事のみ返す
+- **レート制限**: 1分間に100リクエスト
+
+### GET /api/public/articles/[slug]
+- **Response**: `ArticleDetail`
+- **制約**: `status: published` の記事のみ返す
+- **404**: 非公開記事や存在しない記事の場合
+
+### GET /api/public/categories
+- **Response**: `{ categories: Category[] }`（階層構造）
+
+### GET /api/public/tags
+- **Response**: `{ tags: Tag[] }`
+
+### GET /api/public/articles/[slug]/comments
+- **Response**: `{ comments: Comment[] }`（承認済みのみ、`pending` / `rejected` は除外）
+
+## 管理API（認証必要）
+
+### GET /api/articles
+- **Query**: `?status=draft|pending|published|archived&limit=20&offset=0`
+- **Response**: `{ articles: Article[], total: number }`
+- **Auth**: Required
+- **権限制御**:
+  - `admin`: 全記事を閲覧可能
+  - `editor`: 自分の記事のみ閲覧可能
+  - `reader`: 403 Forbidden
+
+### POST /api/articles
+- **Request**: `{ title: string, summary?: string, content: string, coverImageUrl?: string, categoryId: UUID, tagIds?: UUID[], status?: "draft"|"pending" }`
+- **Response**: `201 Created` → `Article`
+- **Auth**: Required
+- **権限制御**:
+  - `admin`, `editor`: 作成可能
+  - `editor` が `status: pending` を指定した場合、公開は `admin` の承認待ち
+  - `reader`: 403 Forbidden
+
+### PATCH /api/articles/[id]
+- **Request**: `{ title?: string, summary?: string, content?: string, coverImageUrl?: string, categoryId?: UUID, tagIds?: UUID[], status?: "draft"|"pending"|"published"|"archived" }`
+- **Response**: `200 OK` → `Article`
+- **Auth**: Required
+- **権限制御**:
+  - `admin`: 全記事を編集可能（`status: published` に直接変更可能）
+  - `editor`: 自分の記事のみ編集可能、`status: published` には変更不可（`pending` にする必要あり）
+  - `reader`: 403 Forbidden
+
+### DELETE /api/articles/[id]
+- **Response**: `204 No Content`
+- **Auth**: Required
+- **権限制御**:
+  - `admin`: 全記事を削除可能
+  - `editor`: 自分の記事のみ削除可能
+  - `reader`: 403 Forbidden
+
+## 画像アップロード系
+
+### POST /api/upload/presigned-url
+- **Request**: `{ fileName: string, fileType: "image/jpeg"|"image/png"|"image/gif"|"image/webp", fileSize: number }`
+- **Response**: `{ uploadUrl: string, publicUrl: string, expiresIn: number }`
+- **Validation**: fileSize <= 5MB (5,242,880 bytes)
+- **Auth**: Required（記事作成権限を持つユーザー）
+
+## コメント管理系
+
+### GET /api/comments
+- **Query**: `?status=pending|approved|rejected&articleId=UUID&limit=20&offset=0`
+- **Response**: `{ comments: Comment[], total: number }`
+- **Auth**: Required
+- **権限制御**:
+  - `admin`: 全コメントを閲覧可能
+  - `editor`: 自分の記事へのコメントのみ閲覧可能
+  - `reader`: 403 Forbidden
+
+### PATCH /api/comments/[id]/approve
+- **Request**: `{}`
+- **Response**: `{ id, status: "approved" }`
+- **Auth**: Required
+- **権限制御**:
+  - `admin`: 全コメントを承認可能
+  - `editor`: 自分の記事へのコメントのみ承認可能
+  - `reader`: 403 Forbidden
+
+### PATCH /api/comments/[id]/reject
+- **Request**: `{}`
+- **Response**: `{ id, status: "rejected" }`
+- **Auth**: Required（権限制御は承認と同じ）
+
+### DELETE /api/comments/[id]
+- **Response**: `204 No Content`
+- **Auth**: Required
+- **権限制御**:
+  - `admin`: 全コメントを削除可能
+  - `editor`: 自分の記事へのコメントのみ削除可能
+  - `reader`: 自分のコメントのみ削除可能
+
+## エラーレスポンス統一フォーマット
+```json
+{
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "この操作を実行する権限がありません",
+    "details": [
+      { "field": "role", "message": "editor には記事の公開権限がありません" }
+    ]
+  }
+}
+```
