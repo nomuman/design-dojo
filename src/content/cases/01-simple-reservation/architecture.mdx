@@ -1,0 +1,49 @@
+---
+title: "アーキテクチャ・技術選定"
+---
+
+# アーキテクチャ・技術選定
+
+## 技術スタック
+- **フロントエンド**: Next.js (App Router)
+- **バックエンド**: Next.js API Routes（単一コードベースで十分な規模感）
+- **認証**: NextAuth.js → カスタムJWT実装に移行（学習目的と柔軟性のため）
+- **DB**: PostgreSQL（予約データの整合性重視）
+- **ORM**: Prisma（型安全・マイグレーションの容易さ）
+- **バリデーション**: Zod（API入出力の型安全）
+
+## フォルダ構成
+```
+app/
+├── api/
+│   ├── auth/
+│   │   ├── login/route.ts
+│   │   ├── refresh/route.ts
+│   │   └── register/route.ts
+│   ├── reservations/
+│   │   ├── route.ts          # GET, POST
+│   │   └── [id]/
+│   │       ├── route.ts      # GET, PATCH, DELETE
+│   │       └── cancel/
+│   │           └── route.ts  # POST
+│   └── facilities/
+│       └── route.ts          # GET
+├── (auth)/
+│   ├── login/page.tsx
+│   └── register/page.tsx
+├── reservations/
+│   ├── page.tsx
+│   ├── new/page.tsx
+│   └── [id]/page.tsx
+└── facilities/
+    └── page.tsx
+lib/
+├── db.ts          # Prisma Client singleton
+├── auth.ts        # JWT署名・検証
+└── validation.ts  # Zod schemas
+```
+
+## なぜこの構成か
+- `app/api/` は機能ごとに階層化。RESTfulなURL設計を意識
+- `lib/` は純粋なロジック層。フレームワーク非依存部分を分離
+- Next.js App Router の Server Actions は使用しない。API Routes を使うことで「フロントとバックの境界」を明確にし、設計の学習を促進

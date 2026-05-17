@@ -1,0 +1,48 @@
+---
+title: "API設計"
+---
+
+# API設計
+
+## 認証系
+
+### POST /api/auth/login
+- **Request**: `{ email: string, password: string }`
+- **Response**: `{ accessToken: string, refreshToken: string }`
+- **Error**: 401（認証失敗）
+
+### POST /api/auth/refresh
+- **Request**: `{ refreshToken: string }`
+- **Response**: `{ accessToken: string }`
+- **Error**: 401（トークン無効）
+
+## 予約系
+
+### GET /api/reservations
+- **Query**: `?status=upcoming&limit=20`
+- **Response**: `{ reservations: Reservation[], total: number }`
+- **Auth**: Required（自分の予約のみ）
+
+### POST /api/reservations
+- **Request**: `{ facilityId: string, startTime: ISOString, endTime: ISOString, purpose?: string }`
+- **Response**: `201 Created` → `Reservation`
+- **Validation**: `startTime < endTime`、施設の営業時間内
+
+### PATCH /api/reservations/[id]
+- **Request**: `{ startTime?: ISOString, endTime?: ISOString, purpose?: string }`
+- **制約**: 予約開始時刻前のみ変更可能
+- **Response**: `200 OK` → `Reservation`
+
+### POST /api/reservations/[id]/cancel
+- **Auth**: Required（予約者本人のみ）
+- **Response**: `200 OK` → `{ id, status: "cancelled" }`
+
+## エラーレスポンス統一フォーマット
+```json
+{
+  "error": {
+    "code": "RESERVATION_CONFLICT",
+    "message": "指定された時間帯は既に予約されています"
+  }
+}
+```

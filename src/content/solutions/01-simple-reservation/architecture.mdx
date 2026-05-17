@@ -1,0 +1,41 @@
+---
+title: "模範解答：アーキテクチャ・技術選定"
+---
+
+# 模範解答：アーキテクチャ・技術選定
+
+## 推奨技術スタック
+
+| 層 | 採用技術 | 候補 | 採用理由 |
+|---|---|---|---|
+| フロント | Next.js App Router | Remix, Nuxt | ファイルベースルーティング、Server Componentで初期データ取得がシンプル |
+| 認証 | カスタムJWT | NextAuth, Clerk | 学習コストと柔軟性のバランス。外部依存を減らしたい場合に有効 |
+| DB | PostgreSQL | MySQL, SQLite | 複雑な制約（部分インデックス等）が必要なため |
+| ORM | Prisma | Drizzle, TypeORM | マイグレーション・型安全・ドキュメントの充実度 |
+| バリデーション | Zod | Yup, Joi | TypeScriptとの親和性、APIスキーマとフロントスキーマの共有可能性 |
+
+## フォルダ構成（模範）
+```
+app/
+├── api/
+│   ├── auth/
+│   ├── reservations/
+│   └── facilities/
+├── (auth)/
+├── reservations/
+└── facilities/
+lib/
+├── db.ts
+├── auth.ts
+└── validation.ts
+```
+
+## 重要な設計判断
+### なぜAPI Routesか？
+Server Actionsでも実装可能だが、**APIとしての境界を意識する**ことで、以下が明確になる：
+- フロントとバックの責務分離
+- モバイルアプリ等、別クライアントからの再利用性
+- 認証ミドルウェアの適用範囲
+
+### なぜPrismaか？
+ Drizzleは軽量だが、Prismaのマイグレーション管理とリレーション表現力がチーム開発に有利。個人開発ならDrizzleでも可。
