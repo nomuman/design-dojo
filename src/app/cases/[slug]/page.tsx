@@ -44,7 +44,7 @@ export default async function CasePage({ params }: { params: Promise<{ slug: str
         </TabsList>
         {data.sections.map((section) => (
           <TabsContent key={section.id} value={section.id} className="prose dark:prose-invert max-w-none">
-            {section.content}
+            <div dangerouslySetInnerHTML={{ __html: section.content }} />
           </TabsContent>
         ))}
       </Tabs>

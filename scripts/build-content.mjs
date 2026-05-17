@@ -1,15 +1,27 @@
 import fs from "fs/promises";
 import path from "path";
+import { compileMDX } from "next-mdx-remote/rsc";
+import { renderToString } from "react-dom/server";
 
 async function main() {
   const contentDir = path.join(process.cwd(), "src/content");
-  const result: Record<string, Record<string, string>> = {
+  const result = {
     cases: {},
     exercises: {},
     solutions: {},
   };
 
-  // cases: src/content/cases/[slug]/[file].mdx
+  const processMdx = async (srcPath, category, key) => {
+    const raw = await fs.readFile(srcPath, "utf8");
+    const { content, frontmatter } = await compileMDX({
+      source: raw,
+      options: { parseFrontmatter: true },
+    });
+    const html = renderToString(content);
+    result[category][key] = { html, frontmatter };
+  };
+
+  // cases
   const casesDir = path.join(contentDir, "cases");
   const caseEntries = await fs.readdir(casesDir, { withFileTypes: true });
   for (const entry of caseEntries) {
@@ -19,22 +31,28 @@ async function main() {
     const files = await fs.readdir(casePath);
     for (const file of files) {
       if (!file.endsWith(".mdx")) continue;
-      const source = await fs.readFile(path.join(casePath, file), "utf8");
-      result.cases[`${slug}/${file.replace(".mdx", "")}`] = source;
+      await processMdx(
+        path.join(casePath, file),
+        "cases",
+        `${slug}/${file.replace(".mdx", "")}`
+      );
     }
   }
 
-  // exercises: src/content/exercises/[slug].mdx
+  // exercises
   const exercisesDir = path.join(contentDir, "exercises");
   const exerciseFiles = await fs.readdir(exercisesDir);
   for (const file of exerciseFiles) {
     if (!file.endsWith(".mdx")) continue;
     const slug = file.replace(".mdx", "");
-    const source = await fs.readFile(path.join(exercisesDir, file), "utf8");
-    result.exercises[slug] = source;
+    await processMdx(
+      path.join(exercisesDir, file),
+      "exercises",
+      slug
+    );
   }
 
-  // solutions: src/content/solutions/[slug]/[file].mdx
+  // solutions
   const solutionsDir = path.join(contentDir, "solutions");
   const solutionEntries = await fs.readdir(solutionsDir, { withFileTypes: true });
   for (const entry of solutionEntries) {
@@ -44,8 +62,11 @@ async function main() {
     const files = await fs.readdir(solutionPath);
     for (const file of files) {
       if (!file.endsWith(".mdx")) continue;
-      const source = await fs.readFile(path.join(solutionPath, file), "utf8");
-      result.solutions[`${slug}/${file.replace(".mdx", "")}`] = source;
+      await processMdx(
+        path.join(solutionPath, file),
+        "solutions",
+        `${slug}/${file.replace(".mdx", "")}`
+      );
     }
   }
 

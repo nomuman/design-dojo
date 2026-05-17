@@ -37,7 +37,7 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
       </div>
 
       <div className="prose dark:prose-invert max-w-none border p-6 rounded-lg bg-card">
-        {data.content}
+        <div dangerouslySetInnerHTML={{ __html: data.content }} />
       </div>
 
       <div className="space-y-4">

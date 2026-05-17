@@ -1,11 +1,17 @@
-import fs from "fs/promises";
-import path from "path";
-import { compileMDX } from "next-mdx-remote/rsc";
+import rawContent from "@/generated/content.json";
+
+type RawContent = {
+  cases: Record<string, { html: string; frontmatter: Record<string, unknown> }>;
+  exercises: Record<string, { html: string; frontmatter: Record<string, unknown> }>;
+  solutions: Record<string, { html: string; frontmatter: Record<string, unknown> }>;
+};
+
+const content = rawContent as RawContent;
 
 export type ContentSection = {
   id: string;
   title: string;
-  content: React.ReactNode;
+  content: string; // HTML string
 };
 
 export type ContentMeta = {
@@ -20,39 +26,49 @@ export type ContentItem = ContentMeta & {
   slug: string;
 };
 
-const CONTENT_DIR = path.join(process.cwd(), "src/content");
+function getCaseEntries(slug: string) {
+  const prefix = `${slug}/`;
+  const result: Record<string, { html: string; frontmatter: Record<string, unknown> }> = {};
+  for (const [key, entry] of Object.entries(content.cases)) {
+    if (key.startsWith(prefix)) {
+      result[key.slice(prefix.length)] = entry;
+    }
+  }
+  return result;
+}
 
-async function parseMdxFile(filePath: string): Promise<{ frontmatter: Record<string, unknown>; content: React.ReactNode }> {
-  const source = await fs.readFile(filePath, "utf8");
-  const { content, frontmatter } = await compileMDX({
-    source,
-    options: { parseFrontmatter: true },
-  });
-  return { frontmatter, content };
+function getSolutionEntries(slug: string) {
+  const prefix = `${slug}/`;
+  const result: Record<string, { html: string; frontmatter: Record<string, unknown> }> = {};
+  for (const [key, entry] of Object.entries(content.solutions)) {
+    if (key.startsWith(prefix)) {
+      result[key.slice(prefix.length)] = entry;
+    }
+  }
+  return result;
 }
 
 export async function getAllCases(): Promise<ContentItem[]> {
-  const casesDir = path.join(CONTENT_DIR, "cases");
-  const entries = await fs.readdir(casesDir, { withFileTypes: true });
-  const dirs = entries.filter((e) => e.isDirectory());
+  const slugs = new Set<string>();
+  for (const key of Object.keys(content.cases)) {
+    const slug = key.split("/")[0];
+    if (slug) slugs.add(slug);
+  }
 
   const items = await Promise.all(
-    dirs.map(async (dir) => {
-      const slug = dir.name;
-      const indexPath = path.join(casesDir, slug, "requirements.mdx");
-      try {
-        const { frontmatter } = await parseMdxFile(indexPath);
-        return {
-          slug,
-          title: (frontmatter.title as string) || slug,
-          description: (frontmatter.description as string) || "",
-          difficulty: (frontmatter.difficulty as "beginner" | "intermediate" | "advanced") || "intermediate",
-          tags: (frontmatter.tags as string[]) || [],
-          order: (frontmatter.order as number) || 999,
-        };
-      } catch {
-        return null;
-      }
+    Array.from(slugs).map(async (slug) => {
+      const entries = getCaseEntries(slug);
+      const requirements = entries["requirements"];
+      if (!requirements) return null;
+      const frontmatter = requirements.frontmatter;
+      return {
+        slug,
+        title: (frontmatter.title as string) || slug,
+        description: (frontmatter.description as string) || "",
+        difficulty: (frontmatter.difficulty as "beginner" | "intermediate" | "advanced") || "intermediate",
+        tags: (frontmatter.tags as string[]) || [],
+        order: (frontmatter.order as number) || 999,
+      };
     })
   );
 
@@ -60,10 +76,8 @@ export async function getAllCases(): Promise<ContentItem[]> {
 }
 
 export async function getCaseContent(slug: string): Promise<{ meta: ContentMeta; sections: ContentSection[] }> {
-  const caseDir = path.join(CONTENT_DIR, "cases", slug);
-  const files = (await fs.readdir(caseDir))
-    .filter((f) => f.endsWith(".mdx"))
-    .sort();
+  const entries = getCaseEntries(slug);
+  const keys = Object.keys(entries).sort();
 
   let meta: ContentMeta = {
     title: slug,
@@ -74,11 +88,11 @@ export async function getCaseContent(slug: string): Promise<{ meta: ContentMeta;
 
   const sections: ContentSection[] = [];
 
-  for (const file of files) {
-    const filePath = path.join(caseDir, file);
-    const { frontmatter, content } = await parseMdxFile(filePath);
+  for (const key of keys) {
+    const entry = entries[key];
+    const frontmatter = entry.frontmatter;
 
-    if (file === "requirements.mdx") {
+    if (key === "requirements") {
       meta = {
         title: (frontmatter.title as string) || slug,
         description: (frontmatter.description as string) || "",
@@ -89,9 +103,9 @@ export async function getCaseContent(slug: string): Promise<{ meta: ContentMeta;
     }
 
     sections.push({
-      id: file.replace(".mdx", ""),
-      title: (frontmatter.title as string) || file.replace(".mdx", ""),
-      content,
+      id: key,
+      title: (frontmatter.title as string) || key,
+      content: entry.html,
     });
   }
 
@@ -99,15 +113,11 @@ export async function getCaseContent(slug: string): Promise<{ meta: ContentMeta;
 }
 
 export async function getAllExercises(): Promise<ContentItem[]> {
-  const exercisesDir = path.join(CONTENT_DIR, "exercises");
-  const files = await fs.readdir(exercisesDir);
-  const mdxFiles = files.filter((f) => f.endsWith(".mdx"));
+  const entries = Object.entries(content.exercises);
 
   const items = await Promise.all(
-    mdxFiles.map(async (file) => {
-      const slug = file.replace(".mdx", "");
-      const filePath = path.join(exercisesDir, file);
-      const { frontmatter } = await parseMdxFile(filePath);
+    entries.map(async ([slug, entry]) => {
+      const frontmatter = entry.frontmatter;
       return {
         slug,
         title: (frontmatter.title as string) || slug,
@@ -122,27 +132,25 @@ export async function getAllExercises(): Promise<ContentItem[]> {
   return items.sort((a, b) => a.order - b.order);
 }
 
-export async function getExerciseContent(slug: string): Promise<{ meta: ContentMeta; content: React.ReactNode }> {
-  const filePath = path.join(CONTENT_DIR, "exercises", `${slug}.mdx`);
-  const { frontmatter, content } = await parseMdxFile(filePath);
+export async function getExerciseContent(slug: string): Promise<{ meta: ContentMeta; content: string }> {
+  const entry = content.exercises[slug];
+  if (!entry) throw new Error(`Exercise not found: ${slug}`);
 
   return {
     meta: {
-      title: (frontmatter.title as string) || slug,
-      description: (frontmatter.description as string) || "",
-      difficulty: (frontmatter.difficulty as "beginner" | "intermediate" | "advanced") || "intermediate",
-      tags: (frontmatter.tags as string[]) || [],
-      order: (frontmatter.order as number) || 999,
+      title: (entry.frontmatter.title as string) || slug,
+      description: (entry.frontmatter.description as string) || "",
+      difficulty: (entry.frontmatter.difficulty as "beginner" | "intermediate" | "advanced") || "intermediate",
+      tags: (entry.frontmatter.tags as string[]) || [],
+      order: (entry.frontmatter.order as number) || 999,
     },
-    content,
+    content: entry.html,
   };
 }
 
 export async function getSolutionContent(slug: string): Promise<{ meta: ContentMeta; sections: ContentSection[] }> {
-  const solutionDir = path.join(CONTENT_DIR, "solutions", slug);
-  const files = (await fs.readdir(solutionDir))
-    .filter((f) => f.endsWith(".mdx"))
-    .sort();
+  const entries = getSolutionEntries(slug);
+  const keys = Object.keys(entries).sort();
 
   let meta: ContentMeta = {
     title: slug,
@@ -153,11 +161,11 @@ export async function getSolutionContent(slug: string): Promise<{ meta: ContentM
 
   const sections: ContentSection[] = [];
 
-  for (const file of files) {
-    const filePath = path.join(solutionDir, file);
-    const { frontmatter, content } = await parseMdxFile(filePath);
+  for (const key of keys) {
+    const entry = entries[key];
+    const frontmatter = entry.frontmatter;
 
-    if (file === "architecture.mdx") {
+    if (key === "architecture") {
       meta = {
         title: (frontmatter.title as string) || slug,
         description: (frontmatter.description as string) || "",
@@ -168,9 +176,9 @@ export async function getSolutionContent(slug: string): Promise<{ meta: ContentM
     }
 
     sections.push({
-      id: file.replace(".mdx", ""),
-      title: (frontmatter.title as string) || file.replace(".mdx", ""),
-      content,
+      id: key,
+      title: (frontmatter.title as string) || key,
+      content: entry.html,
     });
   }
 
