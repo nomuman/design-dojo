@@ -157,3 +157,129 @@ CREATE TABLE ArticleTag (
 | カテゴリ管理 | ✅ | ❌ | ❌ |
 
 **注意**: 複雑な権限管理が必要になった場合（例: 「特定の記事だけeditorに編集権限を与える」）、`role` enum だけでは不十分になります。その場合は**別途権限テーブル**を検討してください。
+
+---
+
+## 模範解答のポイント
+
+### なぜこれが模範解答か
+本設計が「良い設計」と言える理由：
+
+1. **コンテンツのライフサイクルを明確にしている**: `draft` → `pending` → `published` → `archived` の流れが、現実の編集・承認・公開ワークフローを正確に表現している
+2. **SEOと履歴の両立**: `published_at` を残すことで、SEOに必要な「初回公開日」を保持しつつ、`archived` で非公開にできる
+3. **権限の階層が現実的**: `admin` / `editor` / `reader` の3層は、小〜中規模のCMSに最も一般的で実用的な権限設計
+4. **コメントのモデレーション**: 承認制 + 階層構造により、コミュニティの質を保ちながら、対話を促進できる
+
+### 初学者が陥りやすい間違いとの対比
+
+| 項目 | ❌ 初学者が陥りがち | ✅ 模範解答 |
+|------|------------------|-----------|
+| **記事状態管理** | `is_published` boolean だけ | `status` enum + `published_at` datetime |
+| **カテゴリ階層** | `parent_id` + `grandparent_id`（深さ固定） | 自己参照（`parent_id`）で任意の深さに対応 |
+| **コメント構造** | `article_id` + `reply_to_comment_id`（フラット） | `parent_id` で階層構造 + 最大3階層制限 |
+| **権限管理** | `is_admin` boolean | `role` enum（RBAC） |
+| **タグ付け** | `ARTICLE.tags`（配列カラム） | `ARTICLE_TAG` 中間テーブル |
+| **画像管理** | サーバーに直接アップロード | プリサインドURLで直接S3/R2へ |
+
+### さらなる深掘り（上級者向け）
+
+#### 記事の改訂版管理（Revision）
+現状の設計では、公開済み記事を編集すると「上書き」されますが、より厳密な履歴管理が必要な場合：
+
+```sql
+CREATE TABLE ArticleRevision (
+  id UUID PRIMARY KEY,
+  article_id UUID NOT NULL REFERENCES Article(id),
+  title VARCHAR(200) NOT NULL,
+  content TEXT NOT NULL,
+  summary TEXT,
+  cover_image_url VARCHAR(500),
+  created_by UUID NOT NULL REFERENCES User(id),
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  change_note VARCHAR(500)  -- "誤字修正" 等の変更理由
+);
+```
+
+**メリット**:
+- 過去のバージョンにいつでも戻せる
+- 「誰がいつ何を変更したか」完全に追跡可能
+- A/Bテスト（過去のバージョンと新バージョンの比較）が可能
+
+**デメリット**:
+- テーブルが増え、ストレージ容量が増大
+- 記事取得時に「最新バージョン」を取得するクエリが複雑に
+
+**結論**: ニュースサイトや法律文書等、履歴が重要な場合に採用。一般的なブログでは `updated_at` で十分なことが多い。
+
+#### カテゴリの階層構造：自己参照 vs 閉包テーブル
+大規模なカテゴリツリー（数百〜数千のカテゴリ）の場合、**閉包テーブル（Closure Table）**が有効：
+
+```sql
+CREATE TABLE CategoryPath (
+  ancestor_id UUID NOT NULL REFERENCES Category(id),
+  descendant_id UUID NOT NULL REFERENCES Category(id),
+  depth INT NOT NULL,
+  PRIMARY KEY (ancestor_id, descendant_id)
+);
+```
+
+**データ例**:
+| ancestor_id | descendant_id | depth |
+|-------------|---------------|-------|
+| 技術 | 技術 | 0 |
+| 技術 | フロントエンド | 1 |
+| 技術 | React | 2 |
+| フロントエンド | フロントエンド | 0 |
+| フロントエンド | React | 1 |
+
+**メリット**: 「技術カテゴリの全記事（子孫カテゴリ含む）」を取得する際、単純なJOINだけで完了（再帰クエリ不要）。
+
+**デメリット**: カテゴリの追加・削除・移動時に、複数のレコードを更新する必要がある。
+
+**結論**: カテゴリ数が少ない（数十以下）場合は自己参照で十分。数百以上の場合は閉包テーブルを検討。
+
+#### コメントの承認制：ワークフローエンジン
+コメントの承認プロセスが複雑になる場合（例: 「editorの承認 → adminの最終承認」等）：
+
+**Inngest** や **Temporal** 等のワークフローエンジンを使うと、複雑な承認フローをコードで表現できます：
+
+```typescript
+// Inngestの例
+export const commentApprovalWorkflow = inngest.createFunction(
+  { id: "comment-approval" },
+  { event: "comment/submitted" },
+  async ({ event, step }) => {
+    // editorへの通知
+    await step.run("notify-editor", async () => {
+      await sendEmail(event.data.editorId, "新しいコメントが届きました");
+    });
+
+    // editorの承認を待つ（最大48時間）
+    const editorApproval = await step.waitForEvent("comment/editor-approved", {
+      timeout: "48h",
+    });
+
+    if (!editorApproval) {
+      // タイムアウト → 自動却下
+      await step.run("auto-reject", async () => {
+        await rejectComment(event.data.commentId, "承認期限切れ");
+      });
+      return;
+    }
+
+    // adminへの通知
+    await step.run("notify-admin", async () => {
+      await sendEmail(event.data.adminId, "コメントの承認をお願いします");
+    });
+
+    // adminの承認を待つ
+    const adminApproval = await step.waitForEvent("comment/admin-approved", {
+      timeout: "24h",
+    });
+
+    // ...
+  }
+);
+```
+
+**結論**: 承認フローが単純（editorまたはadminのどちらかが承認）なら、ステータス管理だけで十分。多段階承認や条件分岐が必要な場合にワークフローエンジンを検討。

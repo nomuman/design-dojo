@@ -13,12 +13,18 @@ async function main() {
 
   const processMdx = async (srcPath, category, key) => {
     const raw = await fs.readFile(srcPath, "utf8");
-    const { content, frontmatter } = await compileMDX({
-      source: raw,
-      options: { parseFrontmatter: true },
-    });
-    const html = renderToString(content);
-    result[category][key] = { html, frontmatter };
+    try {
+      const { content, frontmatter } = await compileMDX({
+        source: raw,
+        options: { parseFrontmatter: true },
+      });
+      const html = renderToString(content);
+      result[category][key] = { html, frontmatter };
+    } catch (err) {
+      console.error(`Error compiling MDX: ${srcPath}`);
+      console.error(err.message);
+      throw err;
+    }
   };
 
   // cases

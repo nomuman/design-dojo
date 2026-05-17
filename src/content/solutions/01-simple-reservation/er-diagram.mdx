@@ -85,3 +85,70 @@ WHERE facility_id = ?
 - この条件を満たすレコードがあれば、時間帯が重複している
 - DB制約とアプリケーション層の**二重チェック**が必要
 - さらに厳密に行う場合は、トランザクション内で `SELECT FOR UPDATE`（悲観ロック）を使い、チェックからINSERTまでの競合を防ぐ
+
+---
+
+## 模範解答のポイント
+
+### なぜこれが模範解答か
+本設計が「良い設計」と言える理由：
+
+1. **現実の問題を解決している**: 「重複予約」という実務で頻出する問題に対し、DB制約とアプリケーション層の両方で対策している
+2. **拡張性がある**: `status` enum を使うことで、将来的に `no_show`（予約したが来なかった）等の状態を追加しやすい
+3. **監査要件を満たしている**: `cancelled_at` や `updated_at` により、管理者が「いつ誰が何をしたか」を追跡できる
+4. **パフォーマンスを考慮している**: 部分インデックスにより、インデックスのサイズを抑えつつ重複を防いでいる
+
+### 初学者が陥りやすい間違いとの対比
+
+| 項目 | ❌ 初学者が陥りがち | ✅ 模範解答 |
+|------|------------------|-----------|
+| **予約重複防止** | 「`facility_id + start_time` の一意制約で防げる」と思い込む | 一意制約は「開始時刻完全一致」しか防げないことを明示し、アプリケーション層での範囲重複チェックも必須としている |
+| **キャンセル処理** | `DELETE` で物理削除 | `status = 'cancelled'` で論理削除。`cancelled_at` で日時も記録 |
+| **パスワード保存** | 平文またはSHA-256 | bcrypt等の専用ハッシュ関数 |
+| **トークン管理** | localStorageにrefreshToken | HttpOnly CookieにrefreshToken、メモリにaccessToken |
+
+### さらなる深掘り（上級者向け）
+
+#### 部分インデックス vs EXCLUDE制約
+PostgreSQLには、より強力な「範囲重複防止」の仕組みとして `EXCLUDE` 制約があります：
+
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+ALTER TABLE Reservation
+ADD CONSTRAINT no_overlapping_reservations
+EXCLUDE USING gist (
+  facility_id WITH =,
+  tsrange(start_time, end_time) WITH &&
+)
+WHERE (status = 'confirmed');
+```
+
+**メリット**: アプリケーション層の範囲重複チェックなしで、DBレベルで「時間帯の重複」を完全に防げます。
+
+**デメリット**: 
+- GiSTインデックスの作成・更新コストが高い
+- `tsrange` 型の理解が必要
+- PostgreSQL固有の機能であり、他のDB（MySQL等）に移植できない
+
+**結論**: 小〜中規模のシステムでは「部分インデックス + アプリケーション層チェック」で十分。大規模または「絶対に重複を許容できない」要件の場合は `EXCLUDE` 制約を検討。
+
+#### 論理削除の代替案：履歴テーブル
+現状の設計では `status = 'cancelled'` で論理削除していますが、より厳密な履歴管理が必要な場合は以下を検討します：
+
+```sql
+CREATE TABLE ReservationHistory (
+  id UUID PRIMARY KEY,
+  reservation_id UUID NOT NULL,
+  changed_by UUID NOT NULL,
+  old_status VARCHAR(20),
+  new_status VARCHAR(20),
+  changed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+**メリット**: 誰がいつどの状態からどの状態に変更したか、完全に追跡可能。
+
+**デメリット**: テーブルが増え、クエリが複雑になる。
+
+**結論**: 監査要件が厳格な場合（医療、金融等）に採用。一般的なWebサービスでは `updated_at` + `status` で十分なことが多い。

@@ -17,11 +17,11 @@ export default async function SolutionPage({ params }: { params: Promise<{ slug:
   if (!data) notFound();
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 md:space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{data.meta.title}</h1>
-          <p className="text-muted-foreground mt-2">模範解答です。自分の設計と比較してみましょう。</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{data.meta.title}</h1>
+          <p className="text-muted-foreground mt-2 text-sm md:text-base">模範解答です。自分の設計と比較してみましょう。</p>
         </div>
         <Link href={`/exercises/${slug}`}>
           <Button variant="outline">演習に戻る</Button>
@@ -29,13 +29,13 @@ export default async function SolutionPage({ params }: { params: Promise<{ slug:
       </div>
 
       <Tabs defaultValue={data.sections[0]?.id} className="w-full">
-        <TabsList className="w-full justify-start flex-wrap h-auto">
+        <TabsList className="w-full justify-start flex-wrap h-auto min-h-10">
           {data.sections.map((section) => (
-            <TabsTrigger key={section.id} value={section.id}>
+            <TabsTrigger key={section.id} value={section.id} className="text-xs md:text-sm">
               {section.title}
             </TabsTrigger>
           ))}
-          <TabsTrigger value="diff">自分の回答との比較</TabsTrigger>
+          <TabsTrigger value="diff" className="text-xs md:text-sm">自分の回答との比較</TabsTrigger>
         </TabsList>
         {data.sections.map((section) => (
           <TabsContent key={section.id} value={section.id} className="prose dark:prose-invert max-w-none">

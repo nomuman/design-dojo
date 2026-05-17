@@ -128,3 +128,24 @@
     @apply font-sans;
   }
 }
+
+/* スマホ対応: prose 内のテーブル横スクロール */
+.prose table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* スマホ対応: コードブロック横スクロール */
+.prose pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* スマホ対応: Mermaid ダイアグラムのはみ出し防止 */
+.language-mermaid svg,
+.mermaid svg {
+  max-width: 100% !important;
+  height: auto !important;
+}

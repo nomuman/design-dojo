@@ -132,3 +132,84 @@ ON TaskShare(task_id, shared_with_user_id);
 - **将来的な拡張**: 共有設定の変更履歴（「閲覧」→「編集」に変更した記録）を持つ場合、複合キーだと識別が困難
 - **URL設計**: REST APIで共有設定を個別に操作する際（`DELETE /api/task-shares/[id]`）、単一の識別子が必要
 - **ただし**: 現状の要件では複合ユニーク制約（`task_id` + `shared_with_user_id`）も併設する
+
+---
+
+## 模範解答のポイント
+
+### なぜこれが模範解答か
+本設計が「良い設計」と言える理由：
+
+1. **非機能要件を満たしている**: 「期限通知は5分以内」という厳格な要件に対し、cron + キュー + ワーカーの分離により、確実かつスケーラブルな通知を実現している
+2. **現実の制約を考慮している**: `is_overdue` の冗長性を受け入れ、パフォーマンスと履歴追跡の両立を図っている
+3. **権限の粒度が適切**: 「閲覧のみ」「編集可能」の2段階で、過度に複雑にならず、かつ実用的な共有機能を実現している
+4. **通知の信頼性**: `NOTIFICATION_LOG` により「誰に」「いつ」「成功したか」を完全に追跡でき、運用時のトラブルシューティングに強い
+
+### 初学者が陥りやすい間違いとの対比
+
+| 項目 | ❌ 初学者が陥りがち | ✅ 模範解答 |
+|------|------------------|-----------|
+| **期限通知** | フロントエンドのポーリング | cron + キュー + ワーカーの分離 |
+| **タスク共有** | `TASK` に `shared_with_user_id`（単一FK） | `TASK_SHARE` 中間テーブル（複数人 + 権限制御） |
+| **通知履歴** | `TASK.notified_at`（単一カラム） | `NOTIFICATION_LOG` 独立テーブル |
+| **期限切れ判定** | 毎回 `due_date < NOW()` で計算 | `is_overdue` フラグ + cron更新 |
+| **状態遷移** | `status` を文字列（string）で管理 | `status` を enum で管理 |
+
+### さらなる深掘り（上級者向け）
+
+#### キューの選定：Bull vs BullMQ vs その他
+Node.jsエコシステムでのキューライブラリ比較：
+
+| ライブラリ | メリット | デメリット | 結論 |
+|-----------|---------|-----------|------|
+| **Bull** | シンプル、ドキュメント豊富、Redisベース | 新機能の開発が停止気味 | ✅ 小〜中規模向け |
+| **BullMQ** | Bullの後継、TypeScriptネイティブ、スケーラブル | 設定が少し複雑 | ✅ 中〜大規模向け |
+| **Bee Queue** | 軽量、シンプル | 機能が少ない | △ 単純な用途向け |
+| **AWS SQS** | マネージド、インフラ不要 | ベンダーロックイン、コスト | △ AWS環境向け |
+| **RabbitMQ** | 豊富な機能、フレキシブル | インフラ管理が必要、学習コスト高 | △ 複雑なワークフロー向け |
+
+**結論**: 現状の要件では **Bull** または **BullMQ** が最適。将来的に「優先度付きキュー」「遅延ジョブ」「ジョブの進捗追跡」が必要になった場合は BullMQ に移行を検討。
+
+#### 通知の配信保証（At-least-once Delivery）
+「期限通知は必ず届ける」という要件がある場合、以下の対策が必要：
+
+1. **キューの永続化**: Redisの `appendfsync` 設定を有効化し、サーバー障害時もジョブが失われないようにする
+2. **再試行（Retry）**: 通知失敗時に、指数関数的バックオフ（1分後→2分後→4分後...）で再試行
+3. **デッドレターキュー（DLQ）**: 一定回数（例: 5回）再試行しても失敗したジョブを別キューに移動し、後で手動確認
+4. **冪等性（Idempotency）**: 同じ通知が2回届いても問題ないように、通知キー（`user_id + task_id + type`）で重複排除
+
+```typescript
+// 冪等性の実装例
+const notificationKey = `notify:${userId}:${taskId}:${type}`;
+const lock = await redis.set(notificationKey, '1', 'EX', 3600, 'NX');
+if (!lock) {
+  // 既に通知済み（1時間以内）
+  return;
+}
+// 通知処理を実行
+```
+
+#### タスク共有の高度な権限設計
+現状の `view` / `edit` ですべてのケースをカバーできない場合：
+
+```sql
+-- Permission テーブルを追加
+CREATE TABLE Permission (
+  id UUID PRIMARY KEY,
+  name VARCHAR(50) NOT NULL UNIQUE,  -- 'view', 'edit', 'delete', 'share'
+  description TEXT
+);
+
+-- TaskSharePermission 中間テーブル
+CREATE TABLE TaskSharePermission (
+  task_share_id UUID REFERENCES TaskShare(id),
+  permission_id UUID REFERENCES Permission(id),
+  PRIMARY KEY (task_share_id, permission_id)
+);
+```
+
+**メリット**: 「閲覧 + 編集 + 削除」等、細かい権限の組み合わせが可能。
+
+**デメリット**: テーブル・クエリが複雑になる。
+
+**結論**: 現状の要件では `view` / `edit` の2値で十分。要件が複雑になった場合に拡張。

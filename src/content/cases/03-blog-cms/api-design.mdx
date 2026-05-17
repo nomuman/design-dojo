@@ -105,7 +105,7 @@ sources:
   - `reader`: 403 Forbidden
 
 ### PATCH /api/comments/[id]/approve
-- **Request**: `{}`
+- **Request**: `\{}`
 - **Response**: `{ id, status: "approved" }`
 - **Auth**: Required
 - **権限制御**:
@@ -114,7 +114,7 @@ sources:
   - `reader`: 403 Forbidden
 
 ### PATCH /api/comments/[id]/reject
-- **Request**: `{}`
+- **Request**: `\{}`
 - **Response**: `{ id, status: "rejected" }`
 - **Auth**: Required（権限制御は承認と同じ）
 

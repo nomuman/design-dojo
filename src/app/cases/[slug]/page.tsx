@@ -15,9 +15,9 @@ export default async function CasePage({ params }: { params: Promise<{ slug: str
   if (!data) notFound();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">{data.meta.title}</h1>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{data.meta.title}</h1>
         <div className="flex items-center gap-2 mt-2 flex-wrap">
           <Badge
             variant={
@@ -30,14 +30,14 @@ export default async function CasePage({ params }: { params: Promise<{ slug: str
           >
             {data.meta.difficulty}
           </Badge>
-          <p className="text-muted-foreground">{data.meta.description}</p>
+          <p className="text-muted-foreground text-sm md:text-base">{data.meta.description}</p>
         </div>
       </div>
 
       <Tabs defaultValue={data.sections[0]?.id} className="w-full">
-        <TabsList className="w-full justify-start flex-wrap h-auto">
+        <TabsList className="w-full justify-start flex-wrap h-auto min-h-10">
           {data.sections.map((section) => (
-            <TabsTrigger key={section.id} value={section.id}>
+            <TabsTrigger key={section.id} value={section.id} className="text-xs md:text-sm">
               {section.title}
             </TabsTrigger>
           ))}

@@ -58,9 +58,9 @@ export function ExerciseEditor({ slug }: { slug: string }) {
         </div>
 
         <Tabs defaultValue="folder" className="w-full">
-          <TabsList className="w-full justify-start flex-wrap h-auto">
+          <TabsList className="w-full justify-start flex-wrap h-auto min-h-10">
             {SECTIONS.map((section) => (
-              <TabsTrigger key={section.id} value={section.id}>
+              <TabsTrigger key={section.id} value={section.id} className="text-xs md:text-sm">
                 {section.label}
                 {answers[section.id]?.trim().length > 0 && (
                   <span className="ml-1 text-xs text-green-500">●</span>
