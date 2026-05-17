@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node scripts/build-content.mjs && next build",
+    "build": "node scripts/build-content.mjs && opennextjs-cloudflare build",
     "dev": "next dev",
     "start": "next start",
     "lint": "eslint",
