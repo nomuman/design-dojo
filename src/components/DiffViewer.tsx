@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -11,19 +11,24 @@ const SECTIONS = [
   { id: "db", label: "DB設計" },
 ];
 
+function readStoredAnswers(slug: string) {
+  if (typeof window === "undefined") return {};
+
+  const stored = localStorage.getItem(`design-dojo-exercise-${slug}`);
+  if (!stored) return {};
+
+  try {
+    return JSON.parse(stored) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 export function DiffViewer({ slug }: { slug: string }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const key = `design-dojo-exercise-${slug}`;
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      try {
-        setAnswers(JSON.parse(stored));
-      } catch {
-        // ignore
-      }
-    }
+    queueMicrotask(() => setAnswers(readStoredAnswers(slug)));
   }, [slug]);
 
   const hasAnyAnswer = Object.values(answers).some((v) => v?.trim().length > 0);

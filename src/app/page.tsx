@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 import Link from "next/link";
 import { getAllCases, getAllExercises } from "@/lib/content";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

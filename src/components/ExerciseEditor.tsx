@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,20 +12,25 @@ const SECTIONS = [
   { id: "db", label: "DB設計" },
 ];
 
+function readStoredAnswers(slug: string) {
+  if (typeof window === "undefined") return {};
+
+  const stored = localStorage.getItem(`design-dojo-exercise-${slug}`);
+  if (!stored) return {};
+
+  try {
+    return JSON.parse(stored) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 export function ExerciseEditor({ slug }: { slug: string }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const key = `design-dojo-exercise-${slug}`;
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      try {
-        setAnswers(JSON.parse(stored));
-      } catch {
-        // ignore parse error
-      }
-    }
+    queueMicrotask(() => setAnswers(readStoredAnswers(slug)));
   }, [slug]);
 
   const handleChange = (sectionId: string, value: string) => {
