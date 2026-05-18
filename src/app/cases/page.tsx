@@ -9,20 +9,20 @@ export default async function CasesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Cases（設計読解）</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Cases（設計読解）</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground md:text-base">
           先輩エンジニアの設計ドキュメントを読み、なぜその技術選定・構成・API設計なのかを理解します。
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {cases.map((c) => (
           <Link key={c.slug} href={`/cases/${c.slug}`} className="block">
-            <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">
+            <Card className="h-full cursor-pointer transition-colors hover:bg-accent/50">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{c.title}</CardTitle>
-                  <Badge variant={c.difficulty === "beginner" ? "secondary" : c.difficulty === "advanced" ? "destructive" : "default"}>
+                <div className="flex items-start justify-between gap-3">
+                  <CardTitle className="min-w-0 text-lg">{c.title}</CardTitle>
+                  <Badge className="shrink-0" variant={c.difficulty === "beginner" ? "secondary" : c.difficulty === "advanced" ? "destructive" : "default"}>
                     {c.difficulty}
                   </Badge>
                 </div>
@@ -31,9 +31,7 @@ export default async function CasesPage() {
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {c.tags?.map((tag) => (
-                    <span key={tag} className="text-xs bg-muted px-2 py-1 rounded-md">
-                      {tag}
-                    </span>
+                    <Badge key={tag} variant="outline">{tag}</Badge>
                   ))}
                 </div>
               </CardContent>

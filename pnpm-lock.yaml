@@ -17,6 +17,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      gen-interface-jp:
+        specifier: ^0.2.0
+        version: 0.2.0
       lucide-react:
         specifier: ^1.16.0
         version: 1.16.0(react@19.2.4)
@@ -3831,6 +3834,9 @@ packages:
 
   fuzzysort@3.1.0:
     resolution: {integrity: sha512-sR9BNCjBg6LNgwvxlBd0sBABvQitkLzoVY9MYYROQVX/FvfJ4Mai9LsGhDgd8qYdds0bY77VzYd5iuB+v5rwQQ==}
+
+  gen-interface-jp@0.2.0:
+    resolution: {integrity: sha512-ZdxnQs1XUJr11uSVdC8G6hvXC7sPy3ilsPLdrcQEbcROd6S/cMrYU2j0xwahJifCzXN84p3kxUkYDOpLznSWpA==}
 
   generator-function@2.0.1:
     resolution: {integrity: sha512-SFdFmIJi+ybC0vjlHN0ZGVGHc3lgE0DxPAT0djjVg+kjOnSqclqmj0KQ7ykTOLP6YxoqOvuAODGdcHJn+43q3g==}
@@ -10148,6 +10154,8 @@ snapshots:
   functions-have-names@1.2.3: {}
 
   fuzzysort@3.1.0: {}
+
+  gen-interface-jp@0.2.0: {}
 
   generator-function@2.0.1: {}
 

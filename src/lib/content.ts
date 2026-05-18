@@ -11,7 +11,7 @@ const content = rawContent as RawContent;
 export type ContentSection = {
   id: string;
   title: string;
-  content: string; // HTML string
+  content: string;
 };
 
 export type ContentMeta = {
@@ -75,8 +75,9 @@ export async function getAllCases(): Promise<ContentItem[]> {
   return (items.filter(Boolean) as ContentItem[]).sort((a, b) => a.order - b.order);
 }
 
-export async function getCaseContent(slug: string): Promise<{ meta: ContentMeta; sections: ContentSection[] }> {
+export async function getCaseContent(slug: string): Promise<{ meta: ContentMeta; sections: ContentSection[] } | null> {
   const entries = getCaseEntries(slug);
+  if (Object.keys(entries).length === 0) return null;
   const keys = Object.keys(entries).sort();
 
   let meta: ContentMeta = {
@@ -132,9 +133,9 @@ export async function getAllExercises(): Promise<ContentItem[]> {
   return items.sort((a, b) => a.order - b.order);
 }
 
-export async function getExerciseContent(slug: string): Promise<{ meta: ContentMeta; content: string }> {
+export async function getExerciseContent(slug: string): Promise<{ meta: ContentMeta; content: string } | null> {
   const entry = content.exercises[slug];
-  if (!entry) throw new Error(`Exercise not found: ${slug}`);
+  if (!entry) return null;
 
   return {
     meta: {
@@ -148,8 +149,9 @@ export async function getExerciseContent(slug: string): Promise<{ meta: ContentM
   };
 }
 
-export async function getSolutionContent(slug: string): Promise<{ meta: ContentMeta; sections: ContentSection[] }> {
+export async function getSolutionContent(slug: string): Promise<{ meta: ContentMeta; sections: ContentSection[] } | null> {
   const entries = getSolutionEntries(slug);
+  if (Object.keys(entries).length === 0) return null;
   const keys = Object.keys(entries).sort();
 
   let meta: ContentMeta = {

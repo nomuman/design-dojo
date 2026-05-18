@@ -9,20 +9,21 @@ export default async function ExercisesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Exercises（設計演習）</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Exercises（設計演習）</h1>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground md:text-base">
           要件だけが与えられます。自分の頭でフォルダ構成、技術選定、API設計、DB設計を行い、模範解答と照らし合わせましょう。
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {exercises.map((e) => (
           <Link key={e.slug} href={`/exercises/${e.slug}`} className="block">
-            <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">
+            <Card className="h-full cursor-pointer transition-colors hover:bg-accent/50">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{e.title}</CardTitle>
+                <div className="flex items-start justify-between gap-3">
+                  <CardTitle className="min-w-0 text-lg">{e.title}</CardTitle>
                   <Badge
+                    className="shrink-0"
                     variant={
                       e.difficulty === "beginner"
                         ? "secondary"
@@ -39,9 +40,7 @@ export default async function ExercisesPage() {
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   {e.tags?.map((tag) => (
-                    <span key={tag} className="text-xs bg-muted px-2 py-1 rounded-md">
-                      {tag}
-                    </span>
+                    <Badge key={tag} variant="outline">{tag}</Badge>
                   ))}
                 </div>
               </CardContent>

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getExerciseContent, getAllExercises } from "@/lib/content";
@@ -8,6 +9,26 @@ import { ExerciseEditor } from "@/components/ExerciseEditor";
 export async function generateStaticParams() {
   const exercises = await getAllExercises();
   return exercises.map((e) => ({ slug: e.slug }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const data = await getExerciseContent(slug);
+
+  if (!data) return {};
+
+  return {
+    title: data.meta.title,
+    description: data.meta.description,
+    alternates: {
+      canonical: `/exercises/${slug}`,
+    },
+    openGraph: {
+      title: data.meta.title,
+      description: data.meta.description,
+      url: `/exercises/${slug}`,
+    },
+  };
 }
 
 export default async function ExercisePage({ params }: { params: Promise<{ slug: string }> }) {
@@ -43,8 +64,8 @@ export default async function ExercisePage({ params }: { params: Promise<{ slug:
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <h2 className="text-lg md:text-xl font-semibold tracking-tight">自分の設計を書く</h2>
-          <Link href={`/exercises/${slug}/solution`}>
-            <Button variant="outline">模範解答を見る</Button>
+          <Link href={`/exercises/${slug}/solution`} className="sm:self-auto">
+            <Button variant="outline" className="w-full sm:w-auto">模範解答を見る</Button>
           </Link>
         </div>
         <ExerciseEditor slug={slug} />

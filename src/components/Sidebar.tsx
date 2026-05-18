@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { BookOpenText, Dumbbell, Home, Menu, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface SidebarProps {
   cases: { slug: string; title: string }[];
@@ -14,10 +16,19 @@ interface SidebarProps {
 
 export function Sidebar({ cases, exercises }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
+
+  const linkClassName = (href: string) =>
+    cn(
+      "flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+      pathname === href
+        ? "bg-primary text-primary-foreground"
+        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+    );
 
   return (
     <>
-      <div className="md:hidden fixed top-4 left-4 z-50">
+      <div className="fixed left-4 top-[calc(env(safe-area-inset-top)+1rem)] z-50 md:hidden">
         <Button
           variant="outline"
           size="icon"
@@ -35,6 +46,7 @@ export function Sidebar({ cases, exercises }: SidebarProps) {
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0 md:static md:h-screen md:sticky md:top-0
         `}
+        aria-label="メインナビゲーション"
       >
         <div className="p-4">
           <Link
@@ -42,7 +54,10 @@ export function Sidebar({ cases, exercises }: SidebarProps) {
             className="flex items-center gap-2 font-bold text-lg hover:opacity-80 transition-opacity"
             onClick={() => setIsOpen(false)}
           >
-            <span className="text-primary">design-dojo</span>
+            <span className="grid size-8 place-items-center rounded-md bg-primary text-primary-foreground">
+              D
+            </span>
+            <span>design-dojo</span>
           </Link>
           <p className="text-xs text-muted-foreground mt-1">
             設計力・要件定義力の体験型ドリル
@@ -50,17 +65,34 @@ export function Sidebar({ cases, exercises }: SidebarProps) {
         </div>
 
         <ScrollArea className="flex-1 px-3">
-          <div className="space-y-6">
+          <div className="space-y-5 pb-4">
+            <nav className="space-y-1" aria-label="トップ">
+              <Link href="/" className={linkClassName("/")} onClick={() => setIsOpen(false)}>
+                <Home className="size-4" />
+                <span>ホーム</span>
+              </Link>
+              <Link href="/cases" className={linkClassName("/cases")} onClick={() => setIsOpen(false)}>
+                <BookOpenText className="size-4" />
+                <span>Cases 一覧</span>
+              </Link>
+              <Link href="/exercises" className={linkClassName("/exercises")} onClick={() => setIsOpen(false)}>
+                <Dumbbell className="size-4" />
+                <span>Exercises 一覧</span>
+              </Link>
+            </nav>
+
+            <Separator />
+
             <div>
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-2">
                 Cases（読解）
               </h3>
-              <nav className="space-y-1">
+              <nav className="space-y-1" aria-label="設計読解ケース">
                 {cases.map((c) => (
                   <Link
                     key={c.slug}
                     href={`/cases/${c.slug}`}
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                    className={linkClassName(`/cases/${c.slug}`)}
                     onClick={() => setIsOpen(false)}
                   >
                     <span className="truncate">{c.title}</span>
@@ -75,12 +107,12 @@ export function Sidebar({ cases, exercises }: SidebarProps) {
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-2">
                 Exercises（演習）
               </h3>
-              <nav className="space-y-1">
+              <nav className="space-y-1" aria-label="設計演習">
                 {exercises.map((e) => (
                   <Link
                     key={e.slug}
                     href={`/exercises/${e.slug}`}
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                    className={linkClassName(`/exercises/${e.slug}`)}
                     onClick={() => setIsOpen(false)}
                   >
                     <span className="truncate">{e.title}</span>
@@ -99,7 +131,8 @@ export function Sidebar({ cases, exercises }: SidebarProps) {
       </aside>
 
       {isOpen && (
-        <div
+        <button
+          aria-label="メニューを閉じる"
           className="fixed inset-0 z-30 bg-black/50 md:hidden"
           onClick={() => setIsOpen(false)}
         />

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getCaseContent, getAllCases } from "@/lib/content";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,6 +7,26 @@ import { Badge } from "@/components/ui/badge";
 export async function generateStaticParams() {
   const cases = await getAllCases();
   return cases.map((c) => ({ slug: c.slug }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const data = await getCaseContent(slug);
+
+  if (!data) return {};
+
+  return {
+    title: data.meta.title,
+    description: data.meta.description,
+    alternates: {
+      canonical: `/cases/${slug}`,
+    },
+    openGraph: {
+      title: data.meta.title,
+      description: data.meta.description,
+      url: `/cases/${slug}`,
+    },
+  };
 }
 
 export default async function CasePage({ params }: { params: Promise<{ slug: string }> }) {
@@ -35,9 +56,9 @@ export default async function CasePage({ params }: { params: Promise<{ slug: str
       </div>
 
       <Tabs defaultValue={data.sections[0]?.id} className="w-full">
-        <TabsList className="w-full justify-start overflow-x-auto h-10 min-h-10">
+        <TabsList className="scrollbar-thin h-10 min-h-10 w-full justify-start overflow-x-auto">
           {data.sections.map((section) => (
-            <TabsTrigger key={section.id} value={section.id} className="shrink-0 text-xs md:text-sm">
+            <TabsTrigger key={section.id} value={section.id} className="flex-none text-xs md:text-sm">
               {section.title}
             </TabsTrigger>
           ))}
