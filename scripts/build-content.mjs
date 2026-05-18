@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { compileMDX } from "next-mdx-remote/rsc";
 import { renderToString } from "react-dom/server";
+import remarkGfm from "remark-gfm";
 
 async function main() {
   const contentDir = path.join(process.cwd(), "src/content");
@@ -16,7 +17,12 @@ async function main() {
     try {
       const { content, frontmatter } = await compileMDX({
         source: raw,
-        options: { parseFrontmatter: true },
+        options: {
+          parseFrontmatter: true,
+          mdxOptions: {
+            remarkPlugins: [remarkGfm],
+          },
+        },
       });
       const html = renderToString(content);
       result[category][key] = { html, frontmatter };
