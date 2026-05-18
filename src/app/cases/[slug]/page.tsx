@@ -35,15 +35,15 @@ export default async function CasePage({ params }: { params: Promise<{ slug: str
       </div>
 
       <Tabs defaultValue={data.sections[0]?.id} className="w-full">
-        <TabsList className="w-full justify-start flex-wrap h-auto min-h-10">
+        <TabsList className="w-full justify-start overflow-x-auto h-10 min-h-10">
           {data.sections.map((section) => (
-            <TabsTrigger key={section.id} value={section.id} className="text-xs md:text-sm">
+            <TabsTrigger key={section.id} value={section.id} className="shrink-0 text-xs md:text-sm">
               {section.title}
             </TabsTrigger>
           ))}
         </TabsList>
         {data.sections.map((section) => (
-          <TabsContent key={section.id} value={section.id} className="prose dark:prose-invert max-w-none">
+          <TabsContent key={section.id} value={section.id} className="prose dark:prose-invert mt-6 max-w-none">
             <div dangerouslySetInnerHTML={{ __html: section.content }} />
           </TabsContent>
         ))}

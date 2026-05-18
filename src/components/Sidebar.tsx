@@ -17,7 +17,6 @@ export function Sidebar({ cases, exercises }: SidebarProps) {
 
   return (
     <>
-      {/* ハンバーガーボタン（スマホのみ） */}
       <div className="md:hidden fixed top-4 left-4 z-50">
         <Button
           variant="outline"
@@ -29,7 +28,6 @@ export function Sidebar({ cases, exercises }: SidebarProps) {
         </Button>
       </div>
 
-      {/* サイドバー */}
       <aside
         className={`
           fixed inset-y-0 left-0 z-40 w-64 border-r bg-card flex flex-col
@@ -100,7 +98,6 @@ export function Sidebar({ cases, exercises }: SidebarProps) {
         </div>
       </aside>
 
-      {/* オーバーレイ（スマホのみ） */}
       {isOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/50 md:hidden"

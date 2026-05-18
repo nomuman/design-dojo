@@ -10,7 +10,19 @@ export function MermaidInit() {
       startOnLoad: false,
       theme: isDark ? "dark" : "default",
     });
-    mermaid.run({ querySelector: ".language-mermaid" });
+
+    document.querySelectorAll("pre > code.language-mermaid").forEach((code) => {
+      const pre = code.parentElement;
+      if (!pre || pre.dataset.mermaidReady === "true") return;
+
+      const graph = document.createElement("div");
+      graph.className = "mermaid";
+      graph.textContent = code.textContent ?? "";
+      pre.dataset.mermaidReady = "true";
+      pre.replaceWith(graph);
+    });
+
+    mermaid.run({ querySelector: ".mermaid" });
   }, []);
 
   return null;
